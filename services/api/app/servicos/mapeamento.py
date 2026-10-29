@@ -29,6 +29,7 @@ from app.modelos import (
     TipoReporteEstacionamento,
     TipoReporteTrecho,
 )
+from app.persistencia import Registro
 from app.servicos.proximidade import exigir_proximidade
 
 CONFIRMACOES_NECESSARIAS = 2
@@ -64,17 +65,17 @@ def _plural(n: int, singular: str, plural: str) -> str:
 
 
 class ServicoMapeamento:
-    def __init__(self, catalogo: Catalogo, distancia_maxima_m: float) -> None:
+    def __init__(self, catalogo: Catalogo, distancia_maxima_m: float, registro: Optional[Registro] = None) -> None:
         self._catalogo = catalogo
+        self._registro = registro or Registro(None)
         self._distancia_maxima_m = distancia_maxima_m
         self._trechos: dict[str, list[_Reporte]] = {}
         self._estacionamentos: dict[str, list[_Reporte]] = {}
         self._sugestoes: list[SugestaoEstacionamento] = []
         self._lock = threading.Lock()
 
-    @staticmethod
-    def _evitar_repeticao(reportes: list[_Reporte], usuario_id: str, tipo: str, agora: datetime) -> None:
-        if any(r.usuario_id == usuario_id and r.tipo == tipo and agora - r.quando < INTERVALO_REPETICAO
+    def _evitar_repeticao(self, reportes: list[_Reporte], usuario_id: str, tipo: str, agora: datetime) -> None:
+        if not self._registro.restaurando and any(r.usuario_id == usuario_id and r.tipo == tipo and agora - r.quando < INTERVALO_REPETICAO
                for r in reportes):
             raise ErroNegocio("Você já enviou essa informação há pouco. Obrigado!", 429)
 
@@ -84,13 +85,15 @@ class ServicoMapeamento:
                         lat: float, lng: float, agora: datetime) -> ResultadoMapeamento:
         if self._catalogo.trecho(trecho_id) is None:
             raise ErroNegocio("Trecho não encontrado", 404)
-        exigir_proximidade(self._catalogo, trecho_id, lat, lng, self._distancia_maxima_m, "mapear este trecho")
+        if not self._registro.restaurando:
+            exigir_proximidade(self._catalogo, trecho_id, lat, lng, self._distancia_maxima_m, "mapear este trecho")
 
         with self._lock:
             reportes = self._trechos.setdefault(trecho_id, [])
             self._evitar_repeticao(reportes, usuario_id, tipo, agora)
             reportes.append(_Reporte(usuario_id, tipo, agora))
             contagem = Counter(r.tipo for r in _ultimas_por_usuario(reportes, agora).values())
+        self._registro.gravar("reporte_trecho", trecho_id=trecho_id, usuario_id=usuario_id, tipo=tipo, quando=agora)
 
         lider, votos = contagem.most_common(1)[0]
         segundo = contagem.most_common(2)[1][1] if len(contagem) > 1 else 0
@@ -127,13 +130,16 @@ class ServicoMapeamento:
             raise ErroNegocio("Este estacionamento é parceiro: os dados vêm dele mesmo", 422)
         if tipo == "preco" and (preco_hora is None or not 0 <= preco_hora <= PRECO_MAXIMO_HORA):
             raise ErroNegocio(f"Informe um preço por hora entre R$ 0 e R$ {PRECO_MAXIMO_HORA:.0f}", 422)
-        exigir_proximidade(self._catalogo, estacionamento_id, lat, lng, self._distancia_maxima_m,
-                           "informar dados deste estacionamento")
+        if not self._registro.restaurando:
+            exigir_proximidade(self._catalogo, estacionamento_id, lat, lng, self._distancia_maxima_m,
+                               "informar dados deste estacionamento")
 
         with self._lock:
             reportes = self._estacionamentos.setdefault(estacionamento_id, [])
             self._evitar_repeticao(reportes, usuario_id, tipo, agora)
             reportes.append(_Reporte(usuario_id, tipo, agora, preco_hora))
+            self._registro.gravar("reporte_estacionamento", estacionamento_id=estacionamento_id,
+                                  usuario_id=usuario_id, tipo=tipo, preco_hora=preco_hora, quando=agora)
             ultimas = {}
             for r in reportes:  # última resposta de cada usuário, por tipo
                 if agora - r.quando <= JANELA_VALIDADE:
@@ -163,7 +169,8 @@ class ServicoMapeamento:
     # --- Estacionamentos que faltam no mapa ------------------------------------------------
 
     def sugerir_estacionamento(self, usuario_id: str, nome: str, lat: float, lng: float, agora: datetime,
-                               preco_hora: Optional[float] = None) -> ResultadoSugestao:
+                               preco_hora: Optional[float] = None,
+                               sugestao_id: Optional[str] = None) -> ResultadoSugestao:
         nome = nome.strip()
         if len(nome) < 3:
             raise ErroNegocio("Informe o nome do estacionamento", 422)
@@ -180,10 +187,12 @@ class ServicoMapeamento:
             if any(s.usuario_id == usuario_id for s in pendentes):
                 raise ErroNegocio("Você já sugeriu este estacionamento. Falta outro motorista confirmar.", 409)
             nova = SugestaoEstacionamento(
-                id=f"sug-{secrets.token_hex(4)}", usuario_id=usuario_id, nome=nome, lat=lat, lng=lng,
+                id=sugestao_id or f"sug-{secrets.token_hex(4)}", usuario_id=usuario_id, nome=nome, lat=lat, lng=lng,
                 preco_hora=preco_hora, criada_em=agora, status="pendente",
             )
             self._sugestoes.append(nova)
+            self._registro.gravar("sugestao", sugestao_id=nova.id, usuario_id=usuario_id, nome=nome, lat=lat,
+                                  lng=lng, preco_hora=preco_hora, quando=agora)
             grupo = pendentes + [nova]
             usuarios = {s.usuario_id for s in grupo}
             faltam = max(0, CONFIRMACOES_NECESSARIAS - len(usuarios))

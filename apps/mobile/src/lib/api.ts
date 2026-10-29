@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import * as SecureStore from 'expo-secure-store';
 
 import type {
   Contexto,
@@ -24,15 +25,39 @@ function resolverUrlDaApi(): string {
 
 export const API_URL = resolverUrlDaApi();
 
-// Sem login no MVP: cada abertura do app vira um usuário de teste diferente.
-const USUARIO_ID = `demo-${Math.random().toString(36).slice(2, 8)}`;
+// Sem login no MVP: um ID anônimo gerado uma vez e guardado no aparelho. Ele é a base do
+// antifraude do mapeamento colaborativo (cada pessoa conta uma vez) e permite recuperar o
+// estacionamento ativo ao reabrir o app.
+const CHAVE_USUARIO = 'vagacerta.usuario_id';
+let usuarioId = 'anonimo';
+
+function gerarId(): string {
+  return `u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** Carrega o ID guardado (ou cria um). Com `novo = true`, troca de usuário (só para testes). */
+export async function carregarUsuario(novo = false): Promise<string> {
+  let guardado = novo ? null : await SecureStore.getItemAsync(CHAVE_USUARIO).catch(() => null);
+  if (!guardado) {
+    guardado = gerarId();
+    await SecureStore.setItemAsync(CHAVE_USUARIO, guardado).catch(() => {});
+  }
+  usuarioId = guardado;
+  return usuarioId;
+}
 
 async function chamar<T>(caminho: string, init: RequestInit = {}): Promise<T> {
   let resposta: Response;
   try {
     resposta = await fetch(`${API_URL}${caminho}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', 'X-Usuario-Id': USUARIO_ID, ...init.headers },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Usuario-Id': usuarioId,
+        // Evita a página de aviso do ngrok gratuito quando a API é acessada por túnel.
+        'ngrok-skip-browser-warning': '1',
+        ...init.headers,
+      },
     });
   } catch {
     throw new Error(`Não consegui falar com a API em ${API_URL}. Ela está rodando?`);
@@ -54,7 +79,7 @@ const post = <T>(caminho: string, corpo?: unknown) =>
   chamar<T>(caminho, { method: 'POST', body: corpo === undefined ? undefined : JSON.stringify(corpo) });
 
 export const api = {
-  saude: () => chamar<{ status: string; distancia_maxima_m: number }>('/saude'),
+  saude: () => chamar<{ status: string; agora: string; distancia_maxima_m: number }>('/saude'),
 
   destinos: (q: string) => chamar<Destino[]>(`/destinos?${consulta({ q })}`),
 
@@ -88,6 +113,7 @@ export const api = {
     post<Sessao>('/sessoes', { alvo_id, placa, duracao_min, ...posicao }),
   estenderSessao: (id: string, minutos: number) => post<Sessao>(`/sessoes/${id}/estender`, { minutos }),
   encerrarSessao: (id: string) => post<Sessao>(`/sessoes/${id}/encerrar`),
+  sessaoAtiva: () => chamar<Sessao | null>('/sessoes/ativa'),
 
   reportar: (alvo_id: string, livre: boolean, posicao: Coordenada) =>
     post<void>('/reportes', { alvo_id, livre, ...posicao }),
@@ -106,4 +132,13 @@ export const api = {
     }),
   sugerirEstacionamento: (nome: string, preco_hora: number | null, posicao: Coordenada) =>
     post<ResultadoSugestao>('/mapeamento/sugestoes', { nome, preco_hora, ...posicao }),
+
+  // Modo levantamento (equipe): contagem de vagas livres para calibrar o modelo.
+  contarVagas: (trecho_id: string, vagas_livres: number, posicao: Coordenada) =>
+    post<{ registrado: boolean; total_de_contagens: number }>('/levantamento/contagens', {
+      trecho_id,
+      vagas_livres,
+      ...posicao,
+    }),
+  urlExportarContagens: () => `${API_URL}/levantamento/contagens.csv`,
 };

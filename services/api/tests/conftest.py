@@ -1,4 +1,9 @@
+import os
 from datetime import datetime, timedelta
+
+# Testes não gravam em disco nem acessam a internet.
+os.environ["VAGACERTA_BANCO"] = ""
+os.environ["VAGACERTA_DESTINOS"] = "mock"
 
 import pytest
 from fastapi.testclient import TestClient

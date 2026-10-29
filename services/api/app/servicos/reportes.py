@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from app.catalogo import Catalogo
 from app.erros import ErroNegocio
 from app.modelos import FeedbackChegada
+from app.persistencia import Registro
 from app.servicos.disponibilidade import ServicoDisponibilidade, Sinal
 from app.servicos.proximidade import exigir_proximidade
 
@@ -13,8 +14,10 @@ INTERVALO_MINIMO = timedelta(minutes=2)  # por usuário e por vaga
 
 
 class ServicoReportes:
-    def __init__(self, catalogo: Catalogo, disponibilidade: ServicoDisponibilidade, distancia_maxima_m: float) -> None:
+    def __init__(self, catalogo: Catalogo, disponibilidade: ServicoDisponibilidade, distancia_maxima_m: float,
+                 registro: Registro) -> None:
         self._catalogo = catalogo
+        self._registro = registro
         self._distancia_maxima_m = distancia_maxima_m
         self._disponibilidade = disponibilidade
         self._feedbacks: list[FeedbackChegada] = []
@@ -24,7 +27,8 @@ class ServicoReportes:
         """Antifraude simples: precisa estar perto da vaga e esperar entre um reporte e outro."""
         if self._catalogo.trecho(alvo_id) is None:
             raise ErroNegocio("Reportes de vaga livre/ocupada valem só para vagas de rua", 422)
-        exigir_proximidade(self._catalogo, alvo_id, lat, lng, self._distancia_maxima_m, "reportar esta vaga")
+        if not self._registro.restaurando:
+            exigir_proximidade(self._catalogo, alvo_id, lat, lng, self._distancia_maxima_m, "reportar esta vaga")
         recentes = [s for s in self._disponibilidade.sinais(alvo_id)
                     if s.usuario_id == usuario_id and s.fonte == "usuario" and agora - s.criado_em < INTERVALO_MINIMO]
         if recentes:
@@ -39,6 +43,7 @@ class ServicoReportes:
         feedback = FeedbackChegada(alvo_id=alvo_id, usuario_id=usuario_id, encontrou=encontrou, registrado_em=agora)
         with self._lock:
             self._feedbacks.append(feedback)
+        self._registro.gravar("chegada", alvo_id=alvo_id, usuario_id=usuario_id, encontrou=encontrou, quando=agora)
         return feedback
 
     def metricas(self) -> dict:

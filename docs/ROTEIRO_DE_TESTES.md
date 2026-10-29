@@ -26,7 +26,7 @@ xcrun simctl location booted set -25.4430,-49.2909   # Pátio Batel
 | Estacionamento Demo Tiradentes (parceiro, Centro) | `-25.4305,-49.2705` |
 | PUCPR (longe de tudo) | `-25.4515,-49.2507` |
 
-**Simular outro usuário:** cada recarga do app vira um usuário novo. Aperte `r` no terminal do Expo.
+**Simular outro usuário:** na tela **Levantamento (equipe)**, toque em "Trocar usuário de teste" (só aparece em desenvolvimento). O ID do usuário fica guardado no aparelho; recarregar o app não muda mais de usuário.
 
 **Simular outro horário:** reinicie a API com, por exemplo, `VAGACERTA_AGORA=2026-10-23T22:00` (sexta 22h).
 
@@ -37,11 +37,11 @@ xcrun simctl location booted set -25.4430,-49.2909   # Pátio Batel
 | # | Passos | Resultado esperado | ✅/❌ |
 |---|---|---|---|
 | 1.1 | Abrir o app | Mapa do Centro/Batel com linhas coloridas (ruas) e pinos (estacionamentos) | |
-| 1.2 | Olhar as linhas do Batel | A maioria tracejada (estimada); trechos da Setran com linha cheia | |
+| 1.2 | Olhar as linhas do Batel | Linhas contínuas seguindo as ruas, em cores claras (estimativa) | |
 | 1.3 | Digitar "guaira" na busca | Aparece "Teatro Guaíra" (a busca ignora acentos) | |
 | 1.4 | Escolher "Shopping Pátio Batel" | Mapa aproxima do destino e mostra a lista de vagas recomendadas | |
 | 1.5 | Escolher "Jardim Botânico" | Mensagem de que ainda não há vagas cadastradas perto (fora do piloto) | |
-| 1.6 | Ver o rodapé | Legenda (cheia/tracejada, cor clara = estimativa), "+ Sugerir estacionamento" e o crédito do OpenStreetMap | |
+| 1.6 | Ver o rodapé | Legenda (cor clara = estimativa, cor forte = ao vivo), "+ Sugerir estacionamento" e o crédito do OpenStreetMap | |
 
 ## 2. Recomendação
 
@@ -98,12 +98,12 @@ xcrun simctl location booted set -25.4430,-49.2909   # Pátio Batel
 | 7.1 | Perto de uma rua: "Está livre" | "Obrigado!"; a rua passa a mostrar "Livre agora · reporte de usuário", em cor forte (dado ao vivo) | |
 | 7.2 | Repetir logo em seguida | Pede para aguardar (limite de 2 min) | |
 | 7.3 | Numa rua do Batel: "Tem EstaR" | "Falta 1 confirmação de outros motoristas" | |
-| 7.4 | Apertar `r` (novo usuário) e repetir "Tem EstaR" na mesma rua | "Mapa atualizado"; a linha deixa de ser tracejada e mostra "confirmado por usuários" | |
+| 7.4 | Trocar usuário de teste e repetir "Tem EstaR" na mesma rua | "Mapa atualizado"; a tela da vaga mostra "EstaR · confirmado por usuários" (selo com borda contínua) | |
 | 7.5 | Dois usuários marcam "Proibido estacionar" | Linha cinza e a rua sai das recomendações | |
 | 7.6 | Num estacionamento do OSM: informar preço `12` | Passa a mostrar R$ 12,00/h ("informado por 1 usuário") | |
 | 7.7 | Dois usuários: "Este estacionamento fechou" | O estacionamento some do mapa | |
 | 7.8 | "+ Sugerir estacionamento": nome e preço, enviar | "Aparece no mapa quando mais 1 motorista confirmar" | |
-| 7.9 | Apertar `r` e sugerir de novo no mesmo lugar | "Já aparece no mapa"; novo pino no local | |
+| 7.9 | Trocar usuário de teste e sugerir de novo no mesmo lugar | "Já aparece no mapa"; novo pino no local | |
 | 7.10 | "Chegou? Encontrou a vaga?" → Sim | "Obrigado!"; em http://localhost:8000/metricas a taxa de acerto muda | |
 
 ## 8. Estacionamentos parceiros (Centro, fictícios)
@@ -121,8 +121,21 @@ xcrun simctl location booted set -25.4430,-49.2909   # Pátio Batel
 | # | Passos | Resultado esperado | ✅/❌ |
 |---|---|---|---|
 | 9.1 | Parar a API e mexer no app | Mensagem "Não consegui falar com a API em …" (o app não trava) | |
-| 9.2 | Subir a API de novo | App volta a funcionar em até 30 s; reportes e sessões anteriores somem (dados em memória) | |
+| 9.2 | Subir a API de novo | App volta a funcionar em até 30 s; reportes, mapeamento, sessões e contagens **continuam lá** (banco SQLite) | |
 | 9.3 | Negar a permissão de localização | Mensagem pedindo a permissão; o mapa continua funcionando | |
+
+## 10. Funcionalidades novas
+
+| # | Passos | Resultado esperado | ✅/❌ |
+|---|---|---|---|
+| 10.1 | Buscar "hospital são vicente" ou um endereço com número | Resultados reais de Curitiba (busca no OpenStreetMap), além dos destinos fixos | |
+| 10.2 | Iniciar um estacionamento, fechar o Expo Go por completo e abrir de novo | Faixa "Estacionamento ativo até HH:MM" volta, com o tempo restante certo | |
+| 10.3 | Abrir uma vaga, tocar em Waze/Google Maps/Apple Maps e voltar ao app a até 150 m da vaga | Pergunta "Chegou? Encontrou vaga em …?" (Sim / Não / Ainda não cheguei) | |
+| 10.4 | Mesmo teste, voltando ao app longe da vaga | Não pergunta nada | |
+| 10.5 | "Levantamento (equipe)" no rodapé do mapa | Lista as ruas a até 300 m, da mais próxima para a mais distante | |
+| 10.6 | Digitar 3 em uma rua e tocar em "Contar" | Mapa mostra "3 vagas · contagem da equipe" em cor forte | |
+| 10.7 | "Exportar CSV" | Baixa/abre a planilha com a contagem e a previsão do modelo no mesmo horário | |
+| 10.8 | Reiniciar a API e abrir o CSV de novo | A contagem continua lá | |
 
 ---
 

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 
 import type { Destino, Reserva, RespostaRecomendacao, Sessao, VagaNoMapa } from './tipos';
 
@@ -8,6 +8,16 @@ interface SessaoLocal {
   // a duração da sessão a partir daqui, porque a API pode estar com o relógio simulado.
   inicioLocal: number;
   avisoId: string | null;
+}
+
+// Navegação aberta para uma vaga: ao voltar para o app perto dela, perguntamos "Encontrou?".
+export interface Navegacao {
+  vagaId: string;
+  nome: string;
+  lat: number;
+  lng: number;
+  coordenadas: [number, number][] | null;
+  desde: number;
 }
 
 interface EstadoApp {
@@ -26,6 +36,9 @@ interface EstadoApp {
   setReserva: (r: Reserva | null) => void;
   sessaoLocal: SessaoLocal | null;
   setSessaoLocal: (s: SessaoLocal | null) => void;
+  navegacao: Navegacao | null;
+  setNavegacao: (n: Navegacao | null) => void;
+  iniciarNavegacao: (n: Omit<Navegacao, 'desde'>) => void;
 }
 
 const Contexto = createContext<EstadoApp | null>(null);
@@ -38,12 +51,14 @@ export function ProvedorEstado({ children }: { children: ReactNode }) {
   const [recomendacao, setRecomendacao] = useState<RespostaRecomendacao | null>(null);
   const [reserva, setReserva] = useState<Reserva | null>(null);
   const [sessaoLocal, setSessaoLocal] = useState<SessaoLocal | null>(null);
+  const [navegacao, setNavegacao] = useState<Navegacao | null>(null);
+  const iniciarNavegacao = useCallback((n: Omit<Navegacao, 'desde'>) => setNavegacao({ ...n, desde: Date.now() }), []);
 
   return (
     <Contexto.Provider
       value={{
         distanciaMaximaM, setDistanciaMaximaM, origem, setOrigem, destino, setDestino, vagas, setVagas, recomendacao, setRecomendacao,
-        reserva, setReserva, sessaoLocal, setSessaoLocal,
+        reserva, setReserva, sessaoLocal, setSessaoLocal, navegacao, setNavegacao, iniciarNavegacao,
       }}
     >
       {children}

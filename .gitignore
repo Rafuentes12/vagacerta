@@ -16,3 +16,6 @@ infra/osrm/
 
 # Cache das ruas baixadas do OpenStreetMap (o script baixa de novo se faltar)
 services/api/scripts/cache/
+
+# Banco local da API (ações dos usuários)
+services/api/dados/

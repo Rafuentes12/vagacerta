@@ -16,8 +16,8 @@ Esqueleto do app de vagas de estacionamento em tempo real para Curitiba, seguind
 
 ```
 vagacerta/
-├── apps/mobile     # App do motorista — Expo SDK 57 + Expo Router + react-native-maps
-                    #   (SDK 57 porque é o que o Expo Go da App Store suporta hoje)
+├── apps/mobile     # App do motorista — Expo SDK 58 + Expo Router + react-native-maps
+                    #   (a versão do SDK precisa ser a mesma do Expo Go instalado no celular)
 ├── apps/web        # Painel do parceiro — Next.js 16
 ├── services/api    # API — Python 3.12 + FastAPI (monólito modular, dados em memória)
 ├── services/ml     # Notas e calibração do modelo de disponibilidade (v1 = estabelecimentos + Erlang B)
@@ -102,9 +102,13 @@ VAGACERTA_DISTANCIA_MAX_M=20000 .venv/bin/uvicorn app.main:app --reload --host 0
 | Encerrar sessão de rua avisa outros motoristas ("vaga liberada") | `api/app/servicos/sessoes.py` |
 | Crowdsourcing "livre/ocupada" com antifraude simples (distância e intervalo) | `api/app/servicos/reportes.py` |
 | Só inicia estacionamento a até 300 m da vaga (configurável) | `api/app/servicos/proximidade.py` |
-| Linhas tracejadas para trechos estimados; cinza para proibidos | `mobile/src/app/index.tsx` |
+| Linhas coloridas pela dificuldade (claras = estimativa, fortes = ao vivo); cinza para proibidos | `mobile/src/app/index.tsx` |
 | Mapeamento colaborativo: "tem EstaR / sem EstaR / proibido", preço e fechamento de estacionamentos, sugestão de estacionamento novo (vale com 2 usuários concordando) | `api/app/servicos/mapeamento.py`, `mobile/src/app/sugerir.tsx` |
-| "Encontrou a vaga?" → taxa de acerto | `GET /metricas` |
+| "Encontrou a vaga?" → taxa de acerto; perguntado sozinho ao voltar ao app perto da vaga | `GET /metricas`, `mobile/src/componentes/Bastidores.tsx` |
+| Ações dos usuários guardadas em SQLite e reaplicadas ao reiniciar a API | `api/app/persistencia.py` |
+| ID anônimo guardado no aparelho; estacionamento ativo recuperado ao reabrir o app | `mobile/src/lib/api.ts` |
+| Busca real de destinos em Curitiba (Photon/OpenStreetMap), com a lista fixa como reserva | `api/app/provedores/destinos.py` |
+| Modo levantamento: contagem de vagas pela equipe e exportação CSV para calibrar o modelo | `mobile/src/app/levantamento.tsx`, `GET /levantamento/contagens.csv` |
 | Painel do parceiro informando vagas livres ("Mágico de Oz") | `web/src/componentes/PainelParceiro.tsx` |
 
 ## Batel com dados reais
@@ -127,10 +131,10 @@ Quadras acima de 200 m viram partes de até 150 m.
 
 | Regime | No app | Origem |
 |---|---|---|
-| EstaR (Setran: implantado) | linha cheia | lista da Setran |
-| EstaR previsto | tracejada, "confira a placa" | lista da Setran ("próximos meses") |
-| A confirmar | tracejada, "Pode ser EstaR — confira a placa" | demais quadras; usa as regras do EstaR por cautela |
-| Confirmado por usuários | linha cheia | 2 usuários concordando no mapeamento colaborativo |
+| EstaR (Setran: implantado) | selo contínuo "EstaR" | lista da Setran |
+| EstaR previsto | selo tracejado, "confira a placa" | lista da Setran ("próximos meses") |
+| A confirmar | selo tracejado, "Pode ser EstaR — confira a placa" | demais quadras; usa as regras do EstaR por cautela |
+| Confirmado por usuários | selo contínuo, "confirmado por usuários" | 2 usuários concordando no mapeamento colaborativo |
 | Proibido | cinza, fora da recomendação | mapeamento colaborativo |
 
 Não existe camada de EstaR no GeoCuritiba nem no portal de dados abertos; a lista da Setran é a única
@@ -172,9 +176,11 @@ Dados © colaboradores do OpenStreetMap (licença ODbL): o crédito aparece no a
 ## Verificações
 
 Roteiro de testes manuais do app: [docs/ROTEIRO_DE_TESTES.md](docs/ROTEIRO_DE_TESTES.md).
+O GitHub Actions roda as mesmas verificações a cada push (`.github/workflows/ci.yml`).
+Para hospedar a API na nuvem: [docs/HOSPEDAGEM.md](docs/HOSPEDAGEM.md).
 
 ```bash
-cd services/api && .venv/bin/python -m pytest      # 62 testes
+cd services/api && .venv/bin/python -m pytest      # 70 testes
 cd apps/mobile && npx tsc --noEmit && npx expo lint
 cd apps/web && npx tsc --noEmit && npm run lint && npm run build
 ```
@@ -183,11 +189,11 @@ cd apps/web && npx tsc --noEmit && npm run lint && npm run build
 
 1. **Mapa do Google no app:** criar chaves restritas e configurar o plugin `react-native-maps`
    no `app.json`; exige *development build* (`npx expo run:android`). No Expo Go o mapa funciona sem chave.
-2. **Busca real:** `DestinosGooglePlaces` (Places API New com session token, chamado pela API).
+2. **Busca com Google:** `DestinosGooglePlaces` (Places API New com session token), se o Photon não bastar.
 3. **Banco:** `CatalogoPostgres` sobre `infra/db/schema.sql`.
 4. **Rotas reais:** `RotasOSRM` (ver `infra/README.md`).
 5. **Login:** Supabase Auth; a API passa a validar o JWT em vez do cabeçalho `X-Usuario-Id`.
 6. **Tipos compartilhados:** gerar `apps/*/src/lib/tipos.ts` do OpenAPI (`openapi-typescript`).
 7. **Contagens de campo no Batel:** conferir o EstaR quadra a quadra e calibrar o fator de garagens
    (hoje 0,75) e os parâmetros do modelo de demanda (ver `services/ml/README.md`).
-8. **Guardar o mapeamento colaborativo:** hoje os reportes vivem em memória e somem ao reiniciar a API.
+8. **Hospedar a API** (ver `docs/HOSPEDAGEM.md`) e adicionar login ao painel do parceiro.

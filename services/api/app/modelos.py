@@ -8,7 +8,7 @@ from pydantic import BaseModel
 Contexto = Literal["urgencia", "trabalho", "lazer"]
 TipoVaga = Literal["comum", "idoso", "pcd", "carga_descarga"]
 Credencial = Literal["nenhuma", "idoso", "pcd"]
-FonteSinal = Literal["cancela", "atendente", "usuario", "saida"]
+FonteSinal = Literal["cancela", "atendente", "equipe", "usuario", "saida"]
 # Regime de uma vaga de rua: "a_confirmar" = estimada do mapa, pode ser EstaR ou livre.
 Regime = Literal["estar", "a_confirmar", "livre", "proibido"]
 # De onde vem a classificação. Só "estimado" é desenhado tracejado no app.

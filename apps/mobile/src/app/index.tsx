@@ -131,8 +131,6 @@ export default function TelaMapa() {
               coordinates={v.coordenadas!.map(([latitude, longitude]) => ({ latitude, longitude }))}
               strokeColor={corDaVaga(v)}
               strokeWidth={5}
-              // Tracejado = trecho estimado a partir do mapa, ainda não confirmado.
-              lineDashPattern={v.tracejado ? [10, 8] : undefined}
               tappable
               onPress={() => router.push(`/vaga/${v.id}`)}
             />
@@ -236,10 +234,13 @@ export default function TelaMapa() {
           </ScrollView>
         )}
         {destino && !carregando && <Botao titulo="Atualizar recomendação" variante="secundario" onPress={() => recomendar(filtrosAtuais)} />}
+        <Text style={estilos.legenda}>Cor clara = estimativa · cor forte = ao vivo</Text>
         <View style={estilos.rodape}>
-          <Text style={estilos.legenda}>━━ confirmado  ┅┅ estimado · cor clara = estimativa</Text>
           <Pressable onPress={() => router.push('/sugerir')} hitSlop={8}>
             <Text style={estilos.link}>+ Sugerir estacionamento</Text>
+          </Pressable>
+          <Pressable onPress={() => router.push('/levantamento')} hitSlop={8}>
+            <Text style={estilos.link}>Levantamento (equipe)</Text>
           </Pressable>
         </View>
         <Text style={estilos.credito}>

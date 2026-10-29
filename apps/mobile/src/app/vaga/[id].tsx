@@ -20,8 +20,9 @@ const NOMES_COMPONENTES: Record<string, string> = {
 
 export default function TelaVaga() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { recomendacao, vagas, setVagas, reserva, setReserva, sessaoLocal, setSessaoLocal, distanciaMaximaM } =
-    useApp();
+  const {
+    recomendacao, vagas, setVagas, reserva, setReserva, sessaoLocal, setSessaoLocal, distanciaMaximaM, iniciarNavegacao,
+  } = useApp();
   const [placa, setPlaca] = useState('ABC1D23');
   const [preco, setPreco] = useState('');
   const [detalhesAbertos, setDetalhesAbertos] = useState(false);
@@ -84,6 +85,12 @@ export default function TelaVaga() {
 
   const recarregarMapa = () =>
     api.vagas(REGIAO_PILOTO.latitude, REGIAO_PILOTO.longitude, RAIO_VAGAS_M).then(setVagas).catch(() => {});
+
+  // Guarda para onde o motorista foi: ao voltar ao app perto da vaga, perguntamos "Encontrou?".
+  const navegar = (app: 'waze' | 'google' | 'apple') => {
+    iniciarNavegacao({ vagaId: vaga.id, nome: vaga.nome, lat: vaga.lat, lng: vaga.lng, coordenadas: vaga.coordenadas });
+    abrirNavegacao(app, vaga.lat, vaga.lng);
+  };
 
   const reservar = () =>
     executar('reserva', async () => {
@@ -222,11 +229,9 @@ export default function TelaVaga() {
 
       <Text style={estilos.subtitulo}>Ir até a vaga</Text>
       <View style={estilos.linha}>
-        <Botao compacto titulo="Waze" onPress={() => abrirNavegacao('waze', vaga.lat, vaga.lng)} />
-        <Botao compacto titulo="Google Maps" onPress={() => abrirNavegacao('google', vaga.lat, vaga.lng)} />
-        {Platform.OS === 'ios' && (
-          <Botao compacto titulo="Apple Maps" onPress={() => abrirNavegacao('apple', vaga.lat, vaga.lng)} />
-        )}
+        <Botao compacto titulo="Waze" onPress={() => navegar('waze')} />
+        <Botao compacto titulo="Google Maps" onPress={() => navegar('google')} />
+        {Platform.OS === 'ios' && <Botao compacto titulo="Apple Maps" onPress={() => navegar('apple')} />}
       </View>
 
       {!ehRua && (candidato?.pode_reservar || reservaDestaVaga) && (

@@ -15,7 +15,8 @@ from typing import Optional
 from app.catalogo import Catalogo
 from app.erros import ErroNegocio
 from app.modelos import EstadoVaga, FonteSinal
-from app.servicos.demanda import ModeloDemanda, nivel
+from app.persistencia import Registro
+from app.servicos.demanda import Estimativa, ModeloDemanda, nivel
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,7 @@ class ConfigFonte:
 FONTES: dict[str, ConfigFonte] = {
     "cancela": ConfigFonte(0.95, 10, "cancela"),
     "atendente": ConfigFonte(0.85, 20, "atendente"),
+    "equipe": ConfigFonte(0.90, 15, "contagem da equipe"),
     "saida": ConfigFonte(0.70, 4, "vaga liberada por usuário"),
     "usuario": ConfigFonte(0.60, 3, "reporte de usuário"),
 }
@@ -61,17 +63,26 @@ def _texto_idade(minutos: float) -> str:
 
 
 class ServicoDisponibilidade:
-    def __init__(self, catalogo: Catalogo, modelo: Optional[ModeloDemanda] = None) -> None:
+    def __init__(self, catalogo: Catalogo, modelo: Optional[ModeloDemanda] = None,
+                 registro: Optional[Registro] = None) -> None:
         self._catalogo = catalogo
         self._modelo = modelo or ModeloDemanda(catalogo)
+        self._registro = registro or Registro(None)
         self._sinais: dict[str, list[Sinal]] = {}
         self._lock = threading.Lock()
 
-    def registrar(self, sinal: Sinal) -> None:
+    def registrar(self, sinal: Sinal, gravar: bool = True) -> None:
         if self._capacidade(sinal.alvo_id) is None:
             raise ErroNegocio(f"Vaga '{sinal.alvo_id}' não existe", 404)
         with self._lock:
             self._sinais.setdefault(sinal.alvo_id, []).append(sinal)
+        if gravar:
+            self._registro.gravar("sinal", alvo_id=sinal.alvo_id, fonte=sinal.fonte, quando=sinal.criado_em,
+                                  vagas_livres=sinal.vagas_livres, livre=sinal.livre, usuario_id=sinal.usuario_id)
+
+    def estimativa_do_modelo(self, alvo_id: str, momento: datetime) -> Estimativa:
+        """O que o modelo previa, sem os sinais ao vivo (para comparar com as contagens de campo)."""
+        return self._modelo.estimar(alvo_id, self._capacidade(alvo_id), momento)
 
     def sinais(self, alvo_id: str) -> list[Sinal]:
         with self._lock:

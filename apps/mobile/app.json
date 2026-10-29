@@ -32,7 +32,8 @@
           "locationWhenInUsePermission": "O VagaCerta usa sua localização para estimar o tempo até as vagas."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      "expo-secure-store"
     ],
     "scheme": "vagacerta"
   }
